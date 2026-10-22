@@ -1,4 +1,8 @@
-"""Запрос к GigaChat: ключ читается только из .env и в браузер не попадает."""
+"""Запрос к GigaChat: ключ читается только из .env и в браузер не попадает.
+
+Перед отправкой персональные данные заменяются токенами. Словарь соответствий
+остаётся в памяти этого вызова и после ответа подставляет исходные значения.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +27,9 @@ from gigachat.exceptions import (
 )
 from gigachat.models import Chat, Messages, MessagesRole
 
+from anonymizer import anonymize, restore_data
+from anonymization_log import write_anonymization_log
+
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
 
@@ -39,6 +46,8 @@ LEAD_TYPES = ("целевой", "нецелевой", "неясно")
 
 SYSTEM_PROMPT = """Ты помощник менеджера компании, которая строит частные дома (ИЖС) под ключ.
 По тексту заявки подготовь структурированный разбор для сотрудника. Ничего не выдумывай.
+
+Персональные данные в тексте уже скрыты токенами в квадратных скобках, например [ИМЯ_1], [ТЕЛЕФОН_1], [ПОЧТА_1], [АДРЕС_1]. Переноси токен в ответ символ в символ. Не заменяй его догадкой и не проси эти данные ещё раз: токен значит, что значение уже есть. [ИМЯ_1] — это человек, не компания. [АДРЕС_1] — уже указанное место.
 
 Верни только один JSON-объект без пояснений и без markdown. Форма:
 {
@@ -150,19 +159,21 @@ class LeadAnalysis(BaseModel):
 
 
 def analyze_lead(text: str) -> LeadAnalysis:
-    """Отправляет текст заявки в GigaChat и возвращает карточку."""
+    """Скрывает персональные данные, отправляет заявку в GigaChat и возвращает карточку."""
     _load_env()
     cleaned = text.strip()
     if not cleaned:
         raise LeadAssistantError("Вставьте текст заявки или выберите тестовый пример.")
 
+    anonymized, mapping = anonymize(cleaned)
+    write_anonymization_log(anonymized, mapping)
     request = Chat(
         model=_setting("GIGACHAT_MODEL", DEFAULT_MODEL),
         messages=[
             Messages(role=MessagesRole.SYSTEM, content=SYSTEM_PROMPT),
             Messages(
                 role=MessagesRole.USER,
-                content=f"Разбери заявку и верни JSON.\n\nТекст заявки:\n{cleaned}",
+                content=f"Разбери заявку и верни JSON.\n\nТекст заявки:\n{anonymized}",
             ),
         ],
         temperature=0,
@@ -229,7 +240,21 @@ def analyze_lead(text: str) -> LeadAnalysis:
             "Модель вернула ответ в неожиданном виде. Нажмите «Обработать» ещё раз."
         ) from exc
 
-    return _prepare_for_manager(cleaned, analysis)
+    restored = LeadAnalysis.model_validate(restore_data(analysis.model_dump(), mapping))
+    _clear_person_as_company(restored, mapping)
+    return _prepare_for_manager(cleaned, restored)
+
+
+def _clear_person_as_company(analysis: LeadAnalysis, mapping: dict[str, str]) -> None:
+    """Имя клиента не подставляется в поле компании, даже если модель скопировала токен имени."""
+    names = {
+        piece.casefold()
+        for token, value in mapping.items()
+        if token.startswith("[ИМЯ_")
+        for piece in (*value.split(), value)
+    }
+    if analysis.company.casefold() in names:
+        analysis.company = "не указано"
 
 
 def analysis_from_text(raw: str) -> LeadAnalysis:

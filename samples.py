@@ -8,6 +8,11 @@ SAMPLE_FULL = (
     "Пришлите, пожалуйста, предварительное КП."
 )
 
+SAMPLE_OFFTOPIC = (
+    "Добрый день! Нужен ремонт квартиры в новостройке: кухня и санузел. "
+    "Частный дом строить не планируем, участок не смотрим."
+)
+
 SAMPLE_INCOMPLETE = "Добрый день, сколько стоит построить дом?"
 
 SAMPLE_CONFLICT = (
@@ -18,7 +23,40 @@ SAMPLE_CONFLICT = (
 )
 
 SAMPLES = (
-    ("Полный сценарий", SAMPLE_FULL),
-    ("Неполный сценарий", SAMPLE_INCOMPLETE),
-    ("Конфликтный сценарий", SAMPLE_CONFLICT),
+    (
+        "Целевой",
+        {
+            "name": "Александр",
+            "phone": "+7 900 111-22-33",
+            "email": "alexander@example.com",
+            "text": SAMPLE_FULL,
+        },
+    ),
+    (
+        "Нецелевой",
+        {
+            "name": "Ольга",
+            "phone": "+7 900 444-55-66",
+            "email": "olga@example.com",
+            "text": SAMPLE_OFFTOPIC,
+        },
+    ),
+    (
+        "Жалоба",
+        {
+            "name": "Сергей",
+            "phone": "+7 900 333-44-55",
+            "email": "sergey@example.com",
+            "text": SAMPLE_CONFLICT,
+        },
+    ),
+    (
+        "Недостаточно данных",
+        {
+            "name": "Мария",
+            "phone": "+7 900 222-33-44",
+            "email": "maria@example.com",
+            "text": SAMPLE_INCOMPLETE,
+        },
+    ),
 )
